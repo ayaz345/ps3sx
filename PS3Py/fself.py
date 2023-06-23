@@ -121,15 +121,15 @@ def readElf(infile):
 	with open(infile, 'rb') as fp:
 		data = fp.read()
 		ehdr = Elf64_ehdr()
-		ehdr.unpack(data[0:len(ehdr)])
+		ehdr.unpack(data[:len(ehdr)])
 		phdrs = []
 		offset = ehdr.phoff
-		for i in range(ehdr.phnum):
+		for _ in range(ehdr.phnum):
 			phdr = Elf64_phdr()
 			phdr.unpack(data[offset:offset+len(phdr)])
 			offset += len(phdr)
 			phdrs.append(phdr)
-		
+
 		return data, ehdr, phdrs
 
 def genDigest(out, npdrm):
@@ -167,7 +167,7 @@ def genDigest(out, npdrm):
 
 def createFself(npdrm, infile, outfile="EBOOT.BIN"):
 	elf, ehdr, phdrs = readElf(infile)
-	
+
 	header = SelfHeader()
 	appinfo = AppInfo()
 	digestSubHeader = DigestSubHeader()
@@ -189,11 +189,11 @@ def createFself(npdrm, infile, outfile="EBOOT.BIN"):
 	header.phdrOffsets = align(phdrOffsetsOffset, 0x10);
 
 	header.sceVersion = 0
-	
+
 	digestOffset = header.phdrOffsets + len(phdrs) * len(phdrOffsets)
 	header.digest = align(digestOffset, 0x10)
-	header.digestSize = len(digestSubHeader) + len(digestType2
-)
+		header.digestSize = len(digestSubHeader) + len(digestType2
+	)
 	if npdrm:
 		header.digestSize += len(digestSubHeader) + len(digestTypeNPDRM)
 
@@ -206,10 +206,7 @@ def createFself(npdrm, infile, outfile="EBOOT.BIN"):
 
 	appinfo.authid = 0x1010000001000003
 	appinfo.unknown = 0x1000002
-	if npdrm:
-		appinfo.appType = 0x8
-	else:
-		appinfo.appType = 0x4
+	appinfo.appType = 0x8 if npdrm else 0x4
 	appinfo.appVersion = 0x0001000000000000
 
 	offsets = []
@@ -220,10 +217,7 @@ def createFself(npdrm, infile, outfile="EBOOT.BIN"):
 		offset.unk1 = 1
 		offset.unk2 = 0
 		offset.unk3 = 0
-		if phdr.type == 1:
-			offset.unk4 = 2
-		else:
-			offset.unk4 = 0
+		offset.unk4 = 2 if phdr.type == 1 else 0
 		offsets.append(offset)
 	out = open(outfile, 'wb')
 	out.write(header.pack())

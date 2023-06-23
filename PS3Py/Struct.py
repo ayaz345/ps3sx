@@ -28,7 +28,7 @@ class Struct(object):
 	
 	float = StructType(('f', 4))
 
-	def string(cls, len, offset=0, encoding=None, stripNulls=False, value=''):
+	def string(self, len, offset=0, encoding=None, stripNulls=False, value=''):
 		return StructType(('string', (len, offset, encoding, stripNulls, value)))
 	string = classmethod(string)
 	
@@ -43,8 +43,8 @@ class Struct(object):
 		self.__values__ = {}
 		self.__next__ = True
 		self.__baked__ = False
-		
-		if func == None:
+
+		if func is None:
 			self.__format__()
 		else:
 			sys.settrace(self.__trace__)
@@ -52,15 +52,15 @@ class Struct(object):
 			for name in func.func_code.co_varnames:
 				value = self.__frame__.f_locals[name]
 				self.__setattr__(name, value)
-		
+
 		self.__baked__ = True
-		
+
 		if unpack != None:
 			if isinstance(unpack, tuple):
 				self.unpack(*unpack)
 			else:
 				self.unpack(unpack)
-		
+
 		if len(kwargs):
 			for name in kwargs:
 				self.__values__[name] = kwargs[name]
@@ -72,16 +72,16 @@ class Struct(object):
 	def __setattr__(self, name, value):
 		if name in self.__slots__:
 			return object.__setattr__(self, name, value)
-		
+
 		if self.__baked__ == False:
 			if not isinstance(value, list):
 				value = [value]
 				attrname = name
 			else:
-				attrname = '*' + name
-			
+				attrname = f'*{name}'
+
 			self.__values__[name] = None
-			
+
 			for sub in value:
 				if isinstance(sub, Struct):
 					sub = sub.__class__
@@ -96,36 +96,36 @@ class Struct(object):
 					self.__sizes__.append(size)
 					self.__attrs__.append(attrname)
 					self.__next__ = True
-					
+
 					if attrname[0] != '*':
 						self.__values__[name] = size[3]
-					elif self.__values__[name] == None:
-						self.__values__[name] = [size[3] for val in value]
+					elif self.__values__[name] is None:
+						self.__values__[name] = [size[3] for _ in value]
 				elif type_ == 'struct':
 					self.__defs__.append(Struct)
 					self.__sizes__.append(size)
 					self.__attrs__.append(attrname)
 					self.__next__ = True
-					
+
 					if attrname[0] != '*':
 						self.__values__[name] = size()
-					elif self.__values__[name] == None:
-						self.__values__[name] = [size() for val in value]
+					elif self.__values__[name] is None:
+						self.__values__[name] = [size() for _ in value]
 				else:
 					if self.__next__:
 						self.__defs__.append('')
 						self.__sizes__.append(0)
 						self.__attrs__.append([])
 						self.__next__ = False
-					
+
 					self.__defs__[-1] += type_
 					self.__sizes__[-1] += size
 					self.__attrs__[-1].append(attrname)
-					
+
 					if attrname[0] != '*':
 						self.__values__[name] = 0
-					elif self.__values__[name] == None:
-						self.__values__[name] = [0 for val in value]
+					elif self.__values__[name] is None:
+						self.__values__[name] = [0 for _ in value]
 		else:
 			try:
 				self.__values__[name] = value
@@ -135,11 +135,10 @@ class Struct(object):
 	def __getattr__(self, name):
 		if self.__baked__ == False:
 			return name
-		else:
-			try:
-				return self.__values__[name]
-			except KeyError:
-				raise AttributeError(name)
+		try:
+			return self.__values__[name]
+		except KeyError:
+			raise AttributeError(name)
 	
 	def __len__(self):
 		ret = 0
@@ -171,30 +170,30 @@ class Struct(object):
 			elif self.__values__[name].__class__ == list and len(self.__values__[name]) != 0:
 				if not isinstance(self.__values__[name][0], Struct):
 					self.__values__[name] = None
-		
+
 		arraypos, arrayname = None, None
-		
+
 		for i in range(len(self.__defs__)):
 			sdef, size, attrs = self.__defs__[i], self.__sizes__[i], self.__attrs__[i]
-			
+
 			if sdef == Struct.string:
 				size, offset, encoding, stripNulls, value = size
 				if isinstance(size, str):
 					size = self.__values__[size] + offset
-				
+
 				temp = data[pos:pos+size]
 				if len(temp) != size:
 					raise StructException('Expected %i byte string, got %i' % (size, len(temp)))
-				
+
 				if encoding != None:
 					temp = temp.decode(encoding)
-				
+
 				if stripNulls:
 					temp = temp.rstrip('\0')
-				
+
 				if attrs[0] == '*':
 					name = attrs[1:]
-					if self.__values__[name] == None:
+					if self.__values__[name] is None:
 						self.__values__[name] = []
 					self.__values__[name].append(temp)
 				else:
@@ -215,17 +214,14 @@ class Struct(object):
 			else:
 				values = struct.unpack(self.__endian__+sdef, data[pos:pos+size])
 				pos += size
-				j = 0
-				for name in attrs:
+				for j, name in enumerate(attrs):
 					if name[0] == '*':
 						name = name[1:]
-						if self.__values__[name] == None:
+						if self.__values__[name] is None:
 							self.__values__[name] = []
 						self.__values__[name].append(values[j])
 					else:
 						self.__values__[name] = values[j]
-					j += 1
-		
 		return self
 	
 	def pack(self):

@@ -13,10 +13,7 @@ SFO_STRING = 2
 SFO_INT    = 4
 def nullterm(str_plus):
 	z = str_plus.find('\0')
-	if z != -1:
-		return str_plus[:z]
-	else:
-		return str_plus
+	return str_plus[:z] if z != -1 else str_plus
 
 class Header(Struct):
 	__endian__ = Struct.LE
@@ -162,11 +159,8 @@ def convertToXml(sfofile, xml):
 	file.close()
 	
 def getText(nodelist):
-    rc = []
-    for node in nodelist:
-        if node.nodeType == node.TEXT_NODE:
-            rc.append(node.data)
-    return (''.join(rc)).strip()
+	rc = [node.data for node in nodelist if node.nodeType == node.TEXT_NODE]
+	return (''.join(rc)).strip()
 def align(num, alignment):
 	return (num + alignment - 1) & ~(alignment-1)
 def convertToSFO(xml, sfofile, forcetitle, forceappid):
@@ -210,14 +204,14 @@ def convertToSFO(xml, sfofile, forcetitle, forceappid):
 			entry.value_type = SFO_STRING
 			entry.value_len  = len(v) + 1
 			alignment = 4
-			if k == "TITLE":
-				alignment = 0x80
-			elif k == "LICENSE":
+			if k == "LICENSE":
 				alignment = 0x200
+			elif k == "TITLE":
+				alignment = 0x80
 			elif k == "TITLE_ID":
 				alignment = 0x10
-				
-			entry.padded_len = align(entry.value_len, alignment) 
+
+			entry.padded_len = align(entry.value_len, alignment)
 		entry.value_off = valueoff
 		keyoff += len(k)+1
 		valueoff += entry.padded_len
@@ -226,27 +220,26 @@ def convertToSFO(xml, sfofile, forcetitle, forceappid):
 	header.ValueOffset = align(header.KeyOffset + keyoff, 4)
 	keypad = header.ValueOffset - (header.KeyOffset + keyoff)
 	valuepad = header.ValueOffset - (header.KeyOffset + keyoff)
-	file = open(sfofile, "wb")
-	file.write(header.pack())
-	for entry in entries:
-		file.write(entry.pack())
-	for k,v in kvs:
-		file.write(k + '\0')
-	file.write('\0' * keypad)
-	for k,v in kvs:
-		if isinstance(v, int):
-			file.write(struct.pack('<I', v))
-		else:
-			alignment = 4
-			if k == "TITLE":
-				alignment = 0x80
-			elif k == "LICENSE":
-				alignment = 0x200
-			elif k == "TITLE_ID":
-				alignment = 0x10
-			file.write(v + '\0')
-			file.write('\0' * (align(len(v) + 1, alignment) - (len(v) +1)))
-	file.close()
+	with open(sfofile, "wb") as file:
+		file.write(header.pack())
+		for entry in entries:
+			file.write(entry.pack())
+		for k,v in kvs:
+			file.write(k + '\0')
+		file.write('\0' * keypad)
+		for k,v in kvs:
+			if isinstance(v, int):
+				file.write(struct.pack('<I', v))
+			else:
+				alignment = 4
+				if k == "LICENSE":
+					alignment = 0x200
+				elif k == "TITLE":
+					alignment = 0x80
+				elif k == "TITLE_ID":
+					alignment = 0x10
+				file.write(v + '\0')
+				file.write('\0' * (align(len(v) + 1, alignment) - (len(v) +1)))
 def main():
 	global debug
 	global pretty

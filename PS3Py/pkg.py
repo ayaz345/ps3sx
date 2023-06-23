@@ -74,7 +74,7 @@ class FileHeader(Struct):
 		self.padding 		= Struct.uint32
 	def __str__(self):
 		out  = ""
-		out += "[X] File Name: %s [" % self.fileName
+		out += f"[X] File Name: {self.fileName} ["
 		if self.flags & 0xFF == TYPE_NPDRMSELF:
 			out += "NPDRM Self]"
 		elif self.flags & 0xFF == TYPE_DIRECTORY:
@@ -88,17 +88,17 @@ class FileHeader(Struct):
 		else:
 			out += " Overwrite NOT allowed.\n"
 		out += "\n"
-		
+
 		out += "[X] File Name offset: %08x\n" % self.fileNameOff
 		out += "[X] File Name Length: %08x\n" % self.fileNameLength
 		out += "[X] Offset To File Data: %016x\n" % self.fileOff
-		
+
 		out += "[X] File Size: %016x\n" % self.fileSize
 		out += "[X] Flags: %08x\n" % self.flags
 		out += "[X] Padding: %08x\n\n" % self.padding
 		assert self.padding == 0, "I guess I was wrong, this is not padding."
-		
-		
+
+
 		return out
 	def __repr__(self):
 		return self.fileName + ("<FileHeader> Size: 0x%016x" % self.fileSize)
@@ -106,7 +106,7 @@ class FileHeader(Struct):
 		Struct.__init__(self)
 		self.fileName = ""
 	def doWork(self, decrypteddata, context = None):
-		if context == None:
+		if context is None:
 			self.fileName = nullterm(decrypteddata[self.fileNameOff:self.fileNameOff+self.fileNameLength])
 		else:
 			self.fileName = nullterm(crypt(context, decrypteddata[self.fileNameOff:self.fileNameOff+self.fileNameLength], self.fileNameLength))
@@ -180,26 +180,17 @@ def nullterm(str_plus, printhex=False):
 		else:
 			str_plus = listToString(str_plus)
 	z = str_plus.find('\0')
-	if z != -1:
-		return str_plus[:z]
-	else:
-		return str_plus
+	return str_plus[:z] if z != -1 else str_plus
 		
 def keyToContext(key):
 	if isinstance(key, list):
 		key = listToString(key)
-		key = key[0:16]
-	largekey = []
-	for i in range(0, 8):
-		largekey.append(ord(key[i]))
-	for i in range(0, 8):
-		largekey.append(ord(key[i]))
-	for i in range(0, 8):
-		largekey.append(ord(key[i+8]))
-	for i in range(0, 8):
-		largekey.append(ord(key[i+8]))
-	for i in range(0, 0x20):
-		largekey.append(0)
+		key = key[:16]
+	largekey = [ord(key[i]) for i in range(0, 8)]
+	largekey.extend(ord(key[i]) for i in range(0, 8))
+	largekey.extend(ord(key[i+8]) for i in range(0, 8))
+	largekey.extend(ord(key[i+8]) for i in range(0, 8))
+	largekey.extend(0 for _ in range(0, 0x20))
 	return largekey
 
 #Thanks to anonymous for the help with the RE of this part,
@@ -208,11 +199,11 @@ def manipulate(key):
 	if not isinstance(key, list):
 		return
 	tmp = listToString(key[0x38:])
-	
-	
+
+
 	tmpnum = struct.unpack('>Q', tmp)[0]
 	tmpnum += 1
-	tmpnum = tmpnum & 0xFFFFFFFFFFFFFFFF
+	tmpnum &= 0xFFFFFFFFFFFFFFFF
 	setContextNum(key, tmpnum)
 def setContextNum(key, tmpnum):
 	tmpchrs = struct.pack('>Q', tmpnum)
@@ -233,21 +224,6 @@ def crypt(key, inbuf, length):
 		return ""
 	# Call our ultra fast c implemetation
 	return pkgcrypt.pkgcrypt(listToString(key), inbuf, length);
-
-	# Original python (slow) implementation
-	ret = ""
-	offset = 0
-	while length > 0:
-		bytes_to_dump = length
-		if length > 0x10:
-			bytes_to_dump = 0x10
-		outhash = SHA1(listToString(key)[0:0x40])
-		for i in range(0, bytes_to_dump):
-			ret += chr(ord(outhash[i]) ^ ord(inbuf[offset]))
-			offset += 1
-		manipulate(key)
-		length -= bytes_to_dump
-	return ret
 def SHA1(data):
 	m = hashlib.sha1()
 	m.update(data)
@@ -332,10 +308,9 @@ def unpack(filename):
 def getFiles(files, folder, original):
 	oldfolder = folder
 	foundFiles = glob.glob( os.path.join(folder, '*') )
-	sortedList = []
-	for filepath in foundFiles:
-		if not os.path.isdir(filepath):
-			sortedList.append(filepath)
+	sortedList = [
+		filepath for filepath in foundFiles if not os.path.isdir(filepath)
+	]
 	for filepath in foundFiles:
 		if os.path.isdir(filepath):
 			sortedList.append(filepath)
@@ -348,7 +323,7 @@ def getFiles(files, folder, original):
 			folder.fileNameOff 	= 0
 			folder.fileNameLength = len(folder.fileName)
 			folder.fileOff 		= 0
-			
+
 			folder.fileSize 	= 0
 			folder.flags		= TYPE_OVERWRITE_ALLOWED | TYPE_DIRECTORY
 			folder.padding 		= 0
@@ -365,7 +340,7 @@ def getFiles(files, folder, original):
 			if newpath == "USRDIR/EBOOT.BIN":
 				file.fileSize = ((file.fileSize - 0x30 + 63) & ~63) + 0x30
 				file.flags		= TYPE_OVERWRITE_ALLOWED | TYPE_NPDRMSELF
-			
+
 			file.padding 		= 0
 			files.append(file)
 			
@@ -589,13 +564,12 @@ def main():
 		unpack(fileToExtract)
 	elif list:
 		listPkg(fileToList)
+	elif len(args) == 1 and contentid != None:
+		pack(args[0], contentid)
+	elif len(args) == 2 and contentid != None:
+		pack(args[0], contentid, args[1])
 	else:
-		if len(args) == 1 and contentid != None:
-			pack(args[0], contentid)
-		elif len(args) == 2 and contentid != None:
-			pack(args[0], contentid, args[1])
-		else:
-			usage()
-			sys.exit(2)
+		usage()
+		sys.exit(2)
 if __name__ == "__main__":
 	main()
